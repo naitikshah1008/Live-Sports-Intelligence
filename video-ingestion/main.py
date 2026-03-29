@@ -275,6 +275,147 @@ def parse_scoreboard_from_boxes(scoreboard_path: Path, templates):
         "boxes": boxes
     }
 
+def extract_timestamp_from_filename(filename: str) -> float:
+    try:
+        time_part = filename.split("_t")[1].replace(".jpg", "")
+        return float(time_part)
+    except Exception:
+        return -1.0
+    
+def parse_all_scoreboards(detected_dir: Path, max_files: int | None = None):
+    scoreboard_files = sorted(detected_dir.glob("*.jpg"))
+    if not scoreboard_files:
+        print(f"No detected scoreboard images found in {detected_dir}")
+        return []
+    templates = load_digit_templates()
+    if not templates:
+        print(f"No digit templates found in {DIGIT_TEMPLATE_DIR}")
+        return []
+    parsed_rows = []
+    files_to_process = scoreboard_files if max_files is None else scoreboard_files[:max_files]
+    for scoreboard_file in files_to_process:
+        parsed = parse_scoreboard_from_boxes(scoreboard_file, templates)
+        if parsed is None:
+            continue
+        if parsed["status"] != "parsed":
+            continue
+        parsed_rows.append({
+            "file": parsed["file"],
+            "timestamp": extract_timestamp_from_filename(parsed["file"]),
+            "clock": parsed["clock"],
+            "top_score": parsed["top_score"],
+            "bottom_score": parsed["bottom_score"],
+        })
+    return parsed_rows
+
+def is_valid_score_row(row):
+    if not row["clock"]:
+        return False
+    if row["top_score"] == "" or row["bottom_score"] == "":
+        return False
+    if not row["top_score"].isdigit() or not row["bottom_score"].isdigit():
+        return False
+    return True
+
+def smooth_score_sequence(rows, min_confirm_frames: int = 3):
+    stable_rows = []
+    current_stable_score = None
+    candidate_score = None
+    candidate_count = 0
+    for row in rows:
+        if not is_valid_score_row(row):
+            continue
+        score_tuple = (row["top_score"], row["bottom_score"])
+        if current_stable_score is None:
+            current_stable_score = score_tuple
+            stable_rows.append({
+                **row,
+                "stable_top_score": score_tuple[0],
+                "stable_bottom_score": score_tuple[1],
+                "score_changed": False
+            })
+            continue
+        if score_tuple == current_stable_score:
+            candidate_score = None
+            candidate_count = 0
+            stable_rows.append({
+                **row,
+                "stable_top_score": current_stable_score[0],
+                "stable_bottom_score": current_stable_score[1],
+                "score_changed": False
+            })
+            continue
+        if candidate_score == score_tuple:
+            candidate_count += 1
+        else:
+            candidate_score = score_tuple
+            candidate_count = 1
+        if candidate_count >= min_confirm_frames:
+            previous_score = current_stable_score
+            current_stable_score = candidate_score
+            candidate_score = None
+            candidate_count = 0
+            stable_rows.append({
+                **row,
+                "stable_top_score": current_stable_score[0],
+                "stable_bottom_score": current_stable_score[1],
+                "score_changed": current_stable_score != previous_score
+            })
+        else:
+            stable_rows.append({
+                **row,
+                "stable_top_score": current_stable_score[0],
+                "stable_bottom_score": current_stable_score[1],
+                "score_changed": False
+            })
+    return stable_rows
+
+def detect_score_change_events(stable_rows):
+    events = []
+    previous_stable_score = None
+    for row in stable_rows:
+        current_score = (row["stable_top_score"], row["stable_bottom_score"])
+        if previous_stable_score is None:
+            previous_stable_score = current_score
+            continue
+        if current_score != previous_stable_score:
+            events.append({
+                "timestamp": row["timestamp"],
+                "clock": row["clock"],
+                "old_score": f"{previous_stable_score[0]}-{previous_stable_score[1]}",
+                "new_score": f"{current_score[0]}-{current_score[1]}",
+                "file": row["file"]
+            })
+            previous_stable_score = current_score
+    return events
+
+def run_temporal_score_detection(detected_dir: Path, max_files: int | None = None):
+    rows = parse_all_scoreboards(detected_dir, max_files=max_files)
+    if not rows:
+        print("No parsed rows available for temporal smoothing")
+        return
+    stable_rows = smooth_score_sequence(rows, min_confirm_frames=3)
+    events = detect_score_change_events(stable_rows)
+    print("\nSmoothed scoreboard timeline:\n")
+    for row in stable_rows[:50]:
+        print(
+            f'{row["file"]} -> '
+            f'clock={row["clock"]}, '
+            f'raw={row["top_score"]}-{row["bottom_score"]}, '
+            f'stable={row["stable_top_score"]}-{row["stable_bottom_score"]}'
+        )
+    print("\nDetected score change events:\n")
+    if not events:
+        print("No score change events detected yet")
+    else:
+        for event in events:
+            print(
+                f't={event["timestamp"]:.2f}s, '
+                f'clock={event["clock"]}, '
+                f'{event["old_score"]} -> {event["new_score"]}, '
+                f'file={event["file"]}'
+            )
+
 def run_box_ocr(detected_dir: Path, max_files: int = 20) -> None:
     scoreboard_files = sorted(detected_dir.glob("*.jpg"))
     if not scoreboard_files:
@@ -354,9 +495,9 @@ def main() -> None:
         debug_dir=DEBUG_DIR,
         max_files=10
     )
-    run_box_ocr(
+    run_temporal_score_detection(
         detected_dir=DETECTED_DIR,
-        max_files=20
+        max_files=200
     )
 
 if __name__ == "__main__":
