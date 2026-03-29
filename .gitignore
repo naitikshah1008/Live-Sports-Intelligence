@@ -1,0 +1,91 @@
+# ========================
+# OS files
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+.env
+.venv/
+venv/
+
+# ========================
+# Node / React
+# ========================
+node_modules/
+dist/
+build/
+.vite/
+
+# ========================
+# Spring Boot / Java
+# ========================
+target/
+*.jar
+*.war
+*.class
+*.log
+.mvn/
+.settings/
+.project
+.classpath
+
+# ========================
+# IDEs
+# ========================
+.vscode/
+.idea/
+*.iml
+
+# ========================
+# Docker
+# ========================
+*.pid
+*.seed
+
+# ========================
+# Logs
+# ========================
+logs/
+*.log
+
+# ========================
+# Environment files
+# ========================
+.env
+.env.local
+.env.*
+
+# ========================
+# Database
+# ========================
+*.db
+
+# ========================
+# Mac system
+# ========================
+.AppleDouble
+.LSOverride
+
+# ========================
+# Sample videos (DO NOT PUSH)
+# ========================
+sample-videos/*.mp4
+sample-videos/*.mov
+sample-videos/*.avi
+
+# ========================
+# Extra temp files
+# ========================
+*.out
+*.err
+*.tmp
+*.cache
