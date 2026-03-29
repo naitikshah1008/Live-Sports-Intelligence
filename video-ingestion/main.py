@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -13,6 +14,10 @@ MATCH_THRESHOLD = 0.60
 
 STANDARD_WIDTH = 420
 STANDARD_HEIGHT = 220
+
+DIGIT_TEMPLATE_DIR = BASE_DIR / "templates" / "digits"
+DIGIT_WIDTH = 40
+DIGIT_HEIGHT = 60
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -148,7 +153,6 @@ def detect_text_regions(scoreboard_image):
     boxes = []
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-
         if is_valid_candidate_box(x, y, w, h, width, height):
             boxes.append((x, y, w, h))
     boxes = merge_overlapping_boxes(boxes)
@@ -156,6 +160,144 @@ def detect_text_regions(scoreboard_image):
     boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
     return normalized, processed, boxes
 
+def crop_box(image, box):
+    x, y, w, h = box
+    return image[y:y + h, x:x + w]
+
+def preprocess_digit_image(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    _, thresh = cv2.threshold(resized, 150, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(255 - thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return cv2.resize(thresh, (DIGIT_WIDTH, DIGIT_HEIGHT), interpolation=cv2.INTER_CUBIC)
+    largest = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest)
+    digit = thresh[y:y + h, x:x + w]
+    digit = cv2.resize(digit, (DIGIT_WIDTH, DIGIT_HEIGHT), interpolation=cv2.INTER_CUBIC)
+    return digit
+
+def load_digit_templates():
+    templates = {}
+    for digit in range(10):
+        template_path = DIGIT_TEMPLATE_DIR / f"{digit}.png"
+        if not template_path.exists():
+            continue
+        image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+        if image is None:
+            continue
+        image = cv2.resize(image, (DIGIT_WIDTH, DIGIT_HEIGHT), interpolation=cv2.INTER_CUBIC)
+        templates[str(digit)] = image
+    return templates
+
+def match_digit_to_template(digit_image, templates):
+    best_digit = ""
+    best_score = -1.0
+    for digit, template in templates.items():
+        result = cv2.matchTemplate(digit_image, template, cv2.TM_CCOEFF_NORMED)
+        score = result[0][0]
+        if score > best_score:
+            best_score = score
+            best_digit = digit
+    return best_digit, best_score
+
+def read_digit_with_templates(image, templates):
+    processed = preprocess_digit_image(image)
+    digit, confidence = match_digit_to_template(processed, templates)
+    return digit, confidence
+
+def classify_boxes(boxes):
+    if len(boxes) != 6:
+        return None
+    # split into score boxes and clock boxes by x-position
+    score_boxes = [b for b in boxes if b[0] > 250]
+    clock_boxes = [b for b in boxes if b[0] <= 250]
+    if len(score_boxes) != 2 or len(clock_boxes) != 4:
+        return None
+    score_boxes = sorted(score_boxes, key=lambda b: b[1])   # top then bottom
+    clock_boxes = sorted(clock_boxes, key=lambda b: b[0])   # left to right
+    return {
+        "top_score": score_boxes[0],
+        "bottom_score": score_boxes[1],
+        "clock_1": clock_boxes[0],
+        "clock_2": clock_boxes[1],
+        "clock_3": clock_boxes[2],
+        "clock_4": clock_boxes[3],
+    }
+
+def parse_scoreboard_from_boxes(scoreboard_path: Path, templates):
+    image = cv2.imread(str(scoreboard_path))
+    if image is None:
+        return None
+    normalized, processed, boxes = detect_text_regions(image)
+    field_map = classify_boxes(boxes)
+    if field_map is None:
+        return {
+            "file": scoreboard_path.name,
+            "status": "unclassified",
+            "boxes": boxes
+        }
+    top_score, top_conf = read_digit_with_templates(
+        crop_box(normalized, field_map["top_score"]),
+        templates
+    )
+    bottom_score, bottom_conf = read_digit_with_templates(
+        crop_box(normalized, field_map["bottom_score"]),
+        templates
+    )
+    c1, c1_conf = read_digit_with_templates(
+        crop_box(normalized, field_map["clock_1"]),
+        templates
+    )
+    c2, c2_conf = read_digit_with_templates(
+        crop_box(normalized, field_map["clock_2"]),
+        templates
+    )
+    c3, c3_conf = read_digit_with_templates(
+        crop_box(normalized, field_map["clock_3"]),
+        templates
+    )
+    c4, c4_conf = read_digit_with_templates(
+        crop_box(normalized, field_map["clock_4"]),
+        templates
+    )
+    clock = ""
+    if all([c1, c2, c3, c4]):
+        clock = f"{c1}{c2}:{c3}{c4}"
+    return {
+        "file": scoreboard_path.name,
+        "status": "parsed",
+        "top_score": top_score,
+        "bottom_score": bottom_score,
+        "clock": clock,
+        "top_score_conf": top_conf,
+        "bottom_score_conf": bottom_conf,
+        "boxes": boxes
+    }
+
+def run_box_ocr(detected_dir: Path, max_files: int = 20) -> None:
+    scoreboard_files = sorted(detected_dir.glob("*.jpg"))
+    if not scoreboard_files:
+        print(f"No detected scoreboard images found in {detected_dir}")
+        return
+    templates = load_digit_templates()
+    if not templates:
+        print(f"No digit templates found in {DIGIT_TEMPLATE_DIR}")
+        return
+    print(f"\nRunning digit template matching for first {min(max_files, len(scoreboard_files))} scoreboards...\n")
+    for scoreboard_file in scoreboard_files[:max_files]:
+        parsed = parse_scoreboard_from_boxes(scoreboard_file, templates)
+        if parsed is None:
+            continue
+        if parsed["status"] != "parsed":
+            print(f'{parsed["file"]} -> could not classify boxes')
+            continue
+        print(
+            f'{parsed["file"]} -> '
+            f'clock={parsed["clock"]}, '
+            f'top_score={parsed["top_score"]}, '
+            f'bottom_score={parsed["bottom_score"]}'
+        )
 
 def save_debug_regions(scoreboard_path: Path, debug_dir: Path) -> None:
     ensure_dir(debug_dir)
@@ -186,7 +328,6 @@ def save_debug_regions(scoreboard_path: Path, debug_dir: Path) -> None:
     for i, (x, y, w, h) in enumerate(boxes):
         print(f"  box_{i}: x={x}, y={y}, w={w}, h={h}")
 
-
 def process_sample_debug_images(detected_dir: Path, debug_dir: Path, max_files: int = 10) -> None:
     scoreboard_files = sorted(detected_dir.glob("*.jpg"))
     if not scoreboard_files:
@@ -212,6 +353,10 @@ def main() -> None:
         detected_dir=DETECTED_DIR,
         debug_dir=DEBUG_DIR,
         max_files=10
+    )
+    run_box_ocr(
+        detected_dir=DETECTED_DIR,
+        max_files=20
     )
 
 if __name__ == "__main__":
