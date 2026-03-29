@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 from pathlib import Path
+import json
+import csv
 
 BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR.parent / "sample-videos" / "match.mp4"
@@ -18,6 +20,12 @@ STANDARD_HEIGHT = 220
 DIGIT_TEMPLATE_DIR = BASE_DIR / "templates" / "digits"
 DIGIT_WIDTH = 40
 DIGIT_HEIGHT = 60
+
+PARSED_OUTPUT_DIR = BASE_DIR / "output" / "parsed-data"
+TIMELINE_JSON_PATH = PARSED_OUTPUT_DIR / "scoreboard_timeline.json"
+TIMELINE_CSV_PATH = PARSED_OUTPUT_DIR / "scoreboard_timeline.csv"
+EVENTS_JSON_PATH = PARSED_OUTPUT_DIR / "score_change_events.json"
+EVENTS_CSV_PATH = PARSED_OUTPUT_DIR / "score_change_events.csv"
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -389,6 +397,59 @@ def detect_score_change_events(stable_rows):
             previous_stable_score = current_score
     return events
 
+def save_json(data, path: Path) -> None:
+    ensure_dir(path.parent)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
+
+def save_timeline_csv(rows, path: Path) -> None:
+    ensure_dir(path.parent)
+    fieldnames = [
+        "file",
+        "timestamp",
+        "clock",
+        "top_score",
+        "bottom_score",
+        "stable_top_score",
+        "stable_bottom_score",
+        "score_changed"
+    ]
+    with open(path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({
+                "file": row.get("file", ""),
+                "timestamp": row.get("timestamp", ""),
+                "clock": row.get("clock", ""),
+                "top_score": row.get("top_score", ""),
+                "bottom_score": row.get("bottom_score", ""),
+                "stable_top_score": row.get("stable_top_score", ""),
+                "stable_bottom_score": row.get("stable_bottom_score", ""),
+                "score_changed": row.get("score_changed", False),
+            })
+
+def save_events_csv(events, path: Path) -> None:
+    ensure_dir(path.parent)
+    fieldnames = [
+        "timestamp",
+        "clock",
+        "old_score",
+        "new_score",
+        "file"
+    ]
+    with open(path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for event in events:
+            writer.writerow({
+                "timestamp": event.get("timestamp", ""),
+                "clock": event.get("clock", ""),
+                "old_score": event.get("old_score", ""),
+                "new_score": event.get("new_score", ""),
+                "file": event.get("file", ""),
+            })
+
 def run_temporal_score_detection(detected_dir: Path, max_files: int | None = None):
     rows = parse_all_scoreboards(detected_dir, max_files=max_files)
     if not rows:
@@ -415,19 +476,26 @@ def run_temporal_score_detection(detected_dir: Path, max_files: int | None = Non
                 f'{event["old_score"]} -> {event["new_score"]}, '
                 f'file={event["file"]}'
             )
+    save_json(stable_rows, TIMELINE_JSON_PATH)
+    save_timeline_csv(stable_rows, TIMELINE_CSV_PATH)
+    save_json(events, EVENTS_JSON_PATH)
+    save_events_csv(events, EVENTS_CSV_PATH)
+    print("\nSaved parsed outputs:")
+    print(f"Timeline JSON: {TIMELINE_JSON_PATH}")
+    print(f"Timeline CSV:  {TIMELINE_CSV_PATH}")
+    print(f"Events JSON:   {EVENTS_JSON_PATH}")
+    print(f"Events CSV:    {EVENTS_CSV_PATH}")
 
-def run_box_ocr(detected_dir: Path, max_files: int = 20) -> None:
+def run_box_ocr(detected_dir: Path, max_files: int | None = None) -> None:
     scoreboard_files = sorted(detected_dir.glob("*.jpg"))
     if not scoreboard_files:
         print(f"No detected scoreboard images found in {detected_dir}")
         return
-    templates = load_digit_templates()
-    if not templates:
-        print(f"No digit templates found in {DIGIT_TEMPLATE_DIR}")
-        return
-    print(f"\nRunning digit template matching for first {min(max_files, len(scoreboard_files))} scoreboards...\n")
-    for scoreboard_file in scoreboard_files[:max_files]:
-        parsed = parse_scoreboard_from_boxes(scoreboard_file, templates)
+    reader = easyocr.Reader(["en"], gpu=False)
+    files_to_process = scoreboard_files if max_files is None else scoreboard_files[:max_files]
+    print(f"\nRunning OCR on detected candidate boxes for {len(files_to_process)} scoreboards...\n")
+    for scoreboard_file in files_to_process:
+        parsed = parse_scoreboard_from_boxes(reader, scoreboard_file)
         if parsed is None:
             continue
         if parsed["status"] != "parsed":
@@ -497,7 +565,7 @@ def main() -> None:
     )
     run_temporal_score_detection(
         detected_dir=DETECTED_DIR,
-        max_files=200
+        max_files=None
     )
 
 if __name__ == "__main__":
