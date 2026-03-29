@@ -3,6 +3,8 @@
 # ========================
 .DS_Store
 Thumbs.db
+.AppleDouble
+.LSOverride
 
 # ========================
 # Python
@@ -24,6 +26,8 @@ node_modules/
 dist/
 build/
 .vite/
+frontend/.env
+frontend/.env.*
 
 # ========================
 # Spring Boot / Java
@@ -37,6 +41,7 @@ target/
 .settings/
 .project
 .classpath
+backend-api/logs/
 
 # ========================
 # IDEs
@@ -46,10 +51,13 @@ target/
 *.iml
 
 # ========================
-# Docker
+# Docker / Infra
 # ========================
 *.pid
 *.seed
+docker-data/
+kafka-logs/
+zookeeper/
 
 # ========================
 # Logs
@@ -70,22 +78,20 @@ logs/
 *.db
 
 # ========================
-# Mac system
-# ========================
-.AppleDouble
-.LSOverride
-
-# ========================
-# Sample videos (DO NOT PUSH)
+# Media / Generated files
 # ========================
 sample-videos/*.mp4
 sample-videos/*.mov
 sample-videos/*.avi
+clips/
+output/
 
 # ========================
-# Extra temp files
+# Temp / Misc
 # ========================
 *.out
 *.err
 *.tmp
 *.cache
+*.swp
+*.swo
