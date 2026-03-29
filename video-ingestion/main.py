@@ -4,12 +4,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR.parent / "sample-videos" / "match.mp4"
 FRAMES_DIR = BASE_DIR / "output" / "frames"
-CROPPED_DIR = BASE_DIR / "output" / "scoreboard-crops"
+DETECTED_DIR = BASE_DIR / "output" / "detected-scoreboards"
+TEMPLATE_PATH = BASE_DIR / "template" / "scoreboard_template.jpg"
 
 FRAME_INTERVAL_SECONDS = 1
-
-# Adjust these coordinates based on your video
-SCOREBOARD_REGION = (96, 54, 307, 162)  # (x1, y1, x2, y2)
+MATCH_THRESHOLD = 0.60
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -38,30 +37,58 @@ def extract_frames(video_path: Path, output_dir: Path, interval_seconds: int) ->
             timestamp_seconds = frame_count / fps if fps > 0 else 0
             output_filename = output_dir / f"frame_{saved_count:04d}_t{timestamp_seconds:.2f}.jpg"
             cv2.imwrite(str(output_filename), frame)
-            print(f"Saved frame: {output_filename.name}")
             saved_count += 1
         frame_count += 1
     capture.release()
     print(f"\nFinished extracting frames. Total saved: {saved_count}")
 
-def crop_scoreboard_from_frames(frames_dir: Path, cropped_dir: Path, region: tuple[int, int, int, int]) -> None:
-    ensure_dir(cropped_dir)
-    x1, y1, x2, y2 = region
+
+def locate_scoreboard(frame, template, threshold: float):
+    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+    result = cv2.matchTemplate(frame_gray, template_gray, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+    if max_val < threshold:
+        return None, max_val
+    template_height, template_width = template_gray.shape
+    top_left = max_loc
+    bottom_right = (top_left[0] + template_width, top_left[1] + template_height)
+
+    return (top_left, bottom_right), max_val
+
+def auto_crop_scoreboards(frames_dir: Path, detected_dir: Path, template_path: Path, threshold: float) -> None:
+    ensure_dir(detected_dir)
+    template = cv2.imread(str(template_path))
+    if template is None:
+        print(f"Error: could not read template image at {template_path}")
+        return
     frame_files = sorted(frames_dir.glob("*.jpg"))
     if not frame_files:
         print(f"No frames found in {frames_dir}")
         return
-    print(f"\nCropping scoreboard region from {len(frame_files)} frames...")
+    detected_count = 0
+    missed_count = 0
+    print(f"\nRunning template matching on {len(frame_files)} frames...\n")
     for frame_file in frame_files:
         frame = cv2.imread(str(frame_file))
         if frame is None:
             print(f"Skipping unreadable frame: {frame_file.name}")
             continue
-        cropped = frame[y1:y2, x1:x2]
-        output_file = cropped_dir / frame_file.name.replace("frame_", "scoreboard_")
-        cv2.imwrite(str(output_file), cropped)
-        print(f"Cropped: {output_file.name}")
-    print(f"\nFinished cropping scoreboard regions into: {cropped_dir}")
+        match_box, confidence = locate_scoreboard(frame, template, threshold)
+        if match_box is None:
+            print(f"{frame_file.name} -> no match, confidence={confidence:.3f}")
+            missed_count += 1
+            continue
+        (x1, y1), (x2, y2) = match_box
+        scoreboard_crop = frame[y1:y2, x1:x2]
+        output_file = detected_dir / frame_file.name.replace("frame_", "scoreboard_")
+        cv2.imwrite(str(output_file), scoreboard_crop)
+        print(f"{frame_file.name} -> matched, confidence={confidence:.3f}, box=({x1},{y1})-({x2},{y2})")
+        detected_count += 1
+    print(f"\nTemplate matching complete")
+    print(f"Detected scoreboards: {detected_count}")
+    print(f"Missed frames: {missed_count}")
+
 
 def main() -> None:
     extract_frames(
@@ -69,11 +96,11 @@ def main() -> None:
         output_dir=FRAMES_DIR,
         interval_seconds=FRAME_INTERVAL_SECONDS
     )
-
-    crop_scoreboard_from_frames(
+    auto_crop_scoreboards(
         frames_dir=FRAMES_DIR,
-        cropped_dir=CROPPED_DIR,
-        region=SCOREBOARD_REGION
+        detected_dir=DETECTED_DIR,
+        template_path=TEMPLATE_PATH,
+        threshold=MATCH_THRESHOLD
     )
 
 if __name__ == "__main__":

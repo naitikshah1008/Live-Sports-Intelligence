@@ -95,3 +95,21 @@ output/
 *.cache
 *.swp
 *.swo
+
+# ========================
+# Service-specific ignores
+# ========================
+video-ingestion/.venv/
+detection-service/.venv/
+highlight-service/.venv/
+
+video-ingestion/output/
+detection-service/output/
+highlight-service/output/
+
+# ========================
+# Images (only keep template)
+# ========================
+*.jpg
+*.png
+!video-ingestion/template/scoreboard_template.jpg
