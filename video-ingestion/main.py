@@ -1,13 +1,17 @@
 import cv2
-import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR.parent / "sample-videos" / "match.mp4"
-OUTPUT_DIR = BASE_DIR / "output" / "frames"
+FRAMES_DIR = BASE_DIR / "output" / "frames"
+CROPPED_DIR = BASE_DIR / "output" / "scoreboard-crops"
+
 FRAME_INTERVAL_SECONDS = 1
 
-def ensure_output_dir(path: Path) -> None:
+# Adjust these coordinates based on your video
+SCOREBOARD_REGION = (96, 54, 307, 162)  # (x1, y1, x2, y2)
+
+def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 def extract_frames(video_path: Path, output_dir: Path, interval_seconds: int) -> None:
@@ -25,7 +29,7 @@ def extract_frames(video_path: Path, output_dir: Path, interval_seconds: int) ->
     frame_interval = int(fps * interval_seconds)
     frame_count = 0
     saved_count = 0
-    ensure_output_dir(output_dir)
+    ensure_dir(output_dir)
     while True:
         success, frame = capture.read()
         if not success:
@@ -34,18 +38,42 @@ def extract_frames(video_path: Path, output_dir: Path, interval_seconds: int) ->
             timestamp_seconds = frame_count / fps if fps > 0 else 0
             output_filename = output_dir / f"frame_{saved_count:04d}_t{timestamp_seconds:.2f}.jpg"
             cv2.imwrite(str(output_filename), frame)
-            print(f"Saved: {output_filename.name}")
+            print(f"Saved frame: {output_filename.name}")
             saved_count += 1
         frame_count += 1
     capture.release()
-    print("\nFinished extracting frames")
-    print(f"Total saved frames: {saved_count}")
+    print(f"\nFinished extracting frames. Total saved: {saved_count}")
+
+def crop_scoreboard_from_frames(frames_dir: Path, cropped_dir: Path, region: tuple[int, int, int, int]) -> None:
+    ensure_dir(cropped_dir)
+    x1, y1, x2, y2 = region
+    frame_files = sorted(frames_dir.glob("*.jpg"))
+    if not frame_files:
+        print(f"No frames found in {frames_dir}")
+        return
+    print(f"\nCropping scoreboard region from {len(frame_files)} frames...")
+    for frame_file in frame_files:
+        frame = cv2.imread(str(frame_file))
+        if frame is None:
+            print(f"Skipping unreadable frame: {frame_file.name}")
+            continue
+        cropped = frame[y1:y2, x1:x2]
+        output_file = cropped_dir / frame_file.name.replace("frame_", "scoreboard_")
+        cv2.imwrite(str(output_file), cropped)
+        print(f"Cropped: {output_file.name}")
+    print(f"\nFinished cropping scoreboard regions into: {cropped_dir}")
 
 def main() -> None:
     extract_frames(
         video_path=VIDEO_PATH,
-        output_dir=OUTPUT_DIR,
+        output_dir=FRAMES_DIR,
         interval_seconds=FRAME_INTERVAL_SECONDS
+    )
+
+    crop_scoreboard_from_frames(
+        frames_dir=FRAMES_DIR,
+        cropped_dir=CROPPED_DIR,
+        region=SCOREBOARD_REGION
     )
 
 if __name__ == "__main__":
