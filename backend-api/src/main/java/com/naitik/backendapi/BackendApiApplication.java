@@ -1,4 +1,4 @@
-package com.naitik.backend_api;
+package com.naitik.backendapi;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
