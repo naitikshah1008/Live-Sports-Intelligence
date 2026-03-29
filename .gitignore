@@ -95,6 +95,7 @@ output/
 *.cache
 *.swp
 *.swo
+*.sfdx
 
 # ========================
 # Service-specific ignores

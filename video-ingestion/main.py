@@ -1,8 +1,9 @@
 import cv2
-import numpy as np
-from pathlib import Path
 import json
 import csv
+import numpy as np
+from pathlib import Path
+from kafka import KafkaProducer
 
 BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR.parent / "sample-videos" / "match.mp4"
@@ -26,6 +27,9 @@ TIMELINE_JSON_PATH = PARSED_OUTPUT_DIR / "scoreboard_timeline.json"
 TIMELINE_CSV_PATH = PARSED_OUTPUT_DIR / "scoreboard_timeline.csv"
 EVENTS_JSON_PATH = PARSED_OUTPUT_DIR / "score_change_events.json"
 EVENTS_CSV_PATH = PARSED_OUTPUT_DIR / "score_change_events.csv"
+
+KAFKA_BOOTSTRAP_SERVERS = "localhost:29092"
+KAFKA_TOPIC_SCORE_EVENTS = "sports.score.events"
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -450,6 +454,42 @@ def save_events_csv(events, path: Path) -> None:
                 "file": event.get("file", ""),
             })
 
+def create_kafka_producer():
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda value: json.dumps(value).encode("utf-8")
+        )
+        return producer
+    except Exception as error:
+        print(f"Failed to create Kafka producer: {error}")
+        return None
+
+def publish_events_to_kafka(events):
+    producer = create_kafka_producer()
+
+    if producer is None:
+        print("Kafka producer unavailable. Skipping event publishing.")
+        return
+    published_count = 0
+    for event in events:
+        payload = {
+            "event_type": "score_change",
+            "timestamp": event["timestamp"],
+            "clock": event["clock"],
+            "old_score": event["old_score"],
+            "new_score": event["new_score"],
+            "file": event["file"]
+        }
+        try:
+            producer.send(KAFKA_TOPIC_SCORE_EVENTS, value=payload)
+            published_count += 1
+        except Exception as error:
+            print(f"Failed to publish event {payload}: {error}")
+    producer.flush()
+    producer.close()
+    print(f"\nPublished {published_count} score change event(s) to Kafka topic '{KAFKA_TOPIC_SCORE_EVENTS}'")
+
 def run_temporal_score_detection(detected_dir: Path, max_files: int | None = None):
     rows = parse_all_scoreboards(detected_dir, max_files=max_files)
     if not rows:
@@ -485,6 +525,7 @@ def run_temporal_score_detection(detected_dir: Path, max_files: int | None = Non
     print(f"Timeline CSV:  {TIMELINE_CSV_PATH}")
     print(f"Events JSON:   {EVENTS_JSON_PATH}")
     print(f"Events CSV:    {EVENTS_CSV_PATH}")
+    publish_events_to_kafka(events)
 
 def run_box_ocr(detected_dir: Path, max_files: int | None = None) -> None:
     scoreboard_files = sorted(detected_dir.glob("*.jpg"))
