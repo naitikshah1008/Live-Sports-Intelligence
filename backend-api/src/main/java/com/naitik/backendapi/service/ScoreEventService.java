@@ -35,4 +35,11 @@ public class ScoreEventService {
     public List<ScoreEvent> getLatestEvents() {
         return scoreEventRepository.findTop10ByOrderByCreatedAtDesc();
     }
+
+    public ScoreEvent getLatestEventRecord() {
+        return scoreEventRepository.findTop10ByOrderByCreatedAtDesc()
+                .stream()
+                .findFirst()
+                .orElse(null);
+    }
 }

@@ -40,4 +40,8 @@ public class HighlightService {
     public List<Highlight> getLatestHighlights() {
         return highlightRepository.findTop10ByOrderByCreatedAtDesc();
     }
+
+    public long getHighlightCount() {
+        return highlightRepository.count();
+    }
 }
