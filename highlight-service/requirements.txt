@@ -1,3 +1,6 @@
-ffmpeg-python
-kafka-python
+librosa
 numpy
+opencv-python
+ffmpeg-python
+requests
+kafka-python
