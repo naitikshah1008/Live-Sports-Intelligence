@@ -1,121 +1,100 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from "react";
+import axios from "axios";
+import "./index.css";
+
+const API_BASE_URL = "http://localhost:8080/api";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [events, setEvents] = useState([]);
+  const [highlights, setHighlights] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [eventsResponse, highlightsResponse] = await Promise.all([
+        axios.get(`${API_BASE_URL}/events/latest`),
+        axios.get(`${API_BASE_URL}/highlights/latest`),
+      ]);
+
+      setEvents(eventsResponse.data || []);
+      setHighlights(highlightsResponse.data || []);
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+
+    const interval = setInterval(() => {
+      fetchDashboardData();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app">
+      <header className="header">
+        <h1>Live Sports Intelligence</h1>
+        <p>Real-time score event detection and AI highlight generation</p>
+      </header>
 
-      <div className="ticks"></div>
+      {loading ? (
+        <p className="loading">Loading dashboard...</p>
+      ) : (
+        <div className="dashboard-grid">
+          <section className="card">
+            <h2>Recent Score Events</h2>
+            {events.length === 0 ? (
+              <p>No score events found.</p>
+            ) : (
+              <div className="list">
+                {events.map((event) => (
+                  <div className="list-item" key={event.id}>
+                    <p><strong>Clock:</strong> {event.clock}</p>
+                    <p><strong>Score Change:</strong> {event.oldScore} → {event.newScore}</p>
+                    <p><strong>Video Timestamp:</strong> {event.videoTimestamp}s</p>
+                    <p><strong>File:</strong> {event.file}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          <section className="card">
+            <h2>Recent Highlights</h2>
+            {highlights.length === 0 ? (
+              <p>No highlights found.</p>
+            ) : (
+              <div className="list">
+                {highlights.map((highlight) => (
+                  <div className="list-item" key={highlight.id}>
+                    <p><strong>Clock:</strong> {highlight.clock}</p>
+                    <p><strong>Score Change:</strong> {highlight.oldScore} → {highlight.newScore}</p>
+                    <p><strong>Clip:</strong> {highlight.clipFile}</p>
+                    <p><strong>Start:</strong> {highlight.clipStartTime}s</p>
+                    <p><strong>Duration:</strong> {highlight.duration}s</p>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+                    <video
+                      controls
+                      width="100%"
+                      className="video-player"
+                    >
+                      <source src={`file://${highlight.clipPath}`} type="video/mp4" />
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
 
-export default App
+export default App;
