@@ -7,7 +7,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +31,6 @@ public class HighlightService {
                 highlight.setClipStartTime(request.getStartTime());
                 highlight.setDuration(request.getDuration());
                 highlight.setCreatedAt(Instant.now());
-
                 return highlightRepository.save(highlight);
             });
     }
@@ -43,5 +45,17 @@ public class HighlightService {
 
     public long getHighlightCount() {
         return highlightRepository.count();
+    }
+
+    public List<Highlight> getLatestUniqueHighlights() {
+        List<Highlight> allHighlights = highlightRepository.findTop10ByOrderByCreatedAtDesc();
+        Map<String, Highlight> uniqueHighlights = new LinkedHashMap<>();
+        for (Highlight highlight : allHighlights) {
+            String key = highlight.getClock() + "|" + highlight.getOldScore() + "|" + highlight.getNewScore();
+            if (!uniqueHighlights.containsKey(key)) {
+                uniqueHighlights.put(key, highlight);
+            }
+        }
+        return new ArrayList<>(uniqueHighlights.values());
     }
 }

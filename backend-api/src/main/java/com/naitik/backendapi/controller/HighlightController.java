@@ -22,7 +22,6 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class HighlightController {
-
     private final HighlightService highlightService;
 
     @Value("${app.highlights.clips-dir}")
@@ -40,7 +39,7 @@ public class HighlightController {
 
     @GetMapping("/latest")
     public List<Highlight> getLatestHighlights() {
-        return highlightService.getLatestHighlights();
+        return highlightService.getLatestUniqueHighlights();
     }
 
     @GetMapping("/file/{clipFile}")
@@ -48,16 +47,13 @@ public class HighlightController {
         try {
             Path clipPath = Paths.get(clipsDir).resolve(clipFile).normalize();
             Resource resource = new UrlResource(clipPath.toUri());
-
             if (!resource.exists() || !resource.isReadable()) {
                 return ResponseEntity.notFound().build();
             }
-
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType("video/mp4"))
                     .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + clipFile + "\"")
                     .body(resource);
-
         } catch (MalformedURLException error) {
             return ResponseEntity.badRequest().build();
         }

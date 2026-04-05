@@ -63,7 +63,6 @@ def extract_frames(video_path: Path, output_dir: Path, interval_seconds: int) ->
     capture.release()
     print(f"\nFinished extracting frames. Total saved: {saved_count}")
 
-
 def locate_scoreboard(frame, template, threshold: float):
     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)

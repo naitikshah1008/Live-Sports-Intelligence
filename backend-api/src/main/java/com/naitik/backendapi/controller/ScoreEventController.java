@@ -12,7 +12,6 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class ScoreEventController {
-
     private final ScoreEventService scoreEventService;
 
     @GetMapping

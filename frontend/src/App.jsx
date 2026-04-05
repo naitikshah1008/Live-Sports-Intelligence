@@ -17,7 +17,6 @@ function App() {
         axios.get(`${API_BASE_URL}/events`),
         axios.get(`${API_BASE_URL}/highlights/latest`),
       ]);
-
       setSummary(summaryResponse.data || null);
       setEvents(eventsResponse.data || []);
       setHighlights(highlightsResponse.data || []);
@@ -30,11 +29,9 @@ function App() {
 
   useEffect(() => {
     fetchDashboardData();
-
     const interval = setInterval(() => {
       fetchDashboardData();
     }, 5000);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -44,7 +41,6 @@ function App() {
         <h1>Live Sports Intelligence</h1>
         <p>Real-time score event detection and highlight generation dashboard</p>
       </header>
-
       {loading ? (
         <p className="loading">Loading dashboard...</p>
       ) : (
@@ -69,7 +65,6 @@ function App() {
               </div>
             </section>
           )}
-
           <div className="dashboard-grid">
             <section className="card">
               <h2>Match Timeline</h2>
@@ -88,7 +83,6 @@ function App() {
                 </div>
               )}
             </section>
-
             <section className="card">
               <h2>Recent Highlights</h2>
               {highlights.length === 0 ? (
@@ -121,5 +115,4 @@ function App() {
     </div>
   );
 }
-
 export default App;

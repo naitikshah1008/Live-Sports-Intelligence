@@ -12,7 +12,6 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class ScoreEventService {
-
     private final ScoreEventRepository scoreEventRepository;
 
     public ScoreEvent saveFromMessage(ScoreEventMessage message) {
@@ -24,7 +23,6 @@ public class ScoreEventService {
         event.setNewScore(message.getNewScore());
         event.setFile(message.getFile());
         event.setCreatedAt(Instant.now());
-
         return scoreEventRepository.save(event);
     }
 
