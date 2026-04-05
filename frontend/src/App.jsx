@@ -78,12 +78,11 @@ function App() {
                     <p><strong>Start:</strong> {highlight.clipStartTime}s</p>
                     <p><strong>Duration:</strong> {highlight.duration}s</p>
 
-                    <video
-                      controls
-                      width="100%"
-                      className="video-player"
-                    >
-                      <source src={`file://${highlight.clipPath}`} type="video/mp4" />
+                    <video controls width="100%" className="video-player">
+                      <source
+                        src={`http://localhost:8080/api/highlights/file/${highlight.clipFile}`}
+                        type="video/mp4"
+                      />
                       Your browser does not support the video tag.
                     </video>
                   </div>
