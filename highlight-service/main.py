@@ -1,7 +1,9 @@
 import json
 import subprocess
 from pathlib import Path
+import requests
 
+BACKEND_HIGHLIGHTS_API = "http://localhost:8080/api/highlights"
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
@@ -110,6 +112,33 @@ def save_generated_clips_metadata(clips, output_path: Path) -> None:
     with open(output_path, "w", encoding="utf-8") as file:
         json.dump(clips, file, indent=2)
 
+def send_highlights_to_backend(clips):
+    sent_files = set()
+
+    for clip in clips:
+        if clip["clip_file"] in sent_files:
+            continue
+
+        sent_files.add(clip["clip_file"])
+
+        payload = {
+            "clipFile": clip["clip_file"],
+            "clipPath": clip["clip_path"],
+            "eventTimestamp": clip["event_timestamp"],
+            "clock": clip["clock"],
+            "oldScore": clip["old_score"],
+            "newScore": clip["new_score"],
+            "startTime": clip["start_time"],
+            "duration": clip["duration"]
+        }
+
+        try:
+            response = requests.post(BACKEND_HIGHLIGHTS_API, json=payload, timeout=10)
+            response.raise_for_status()
+            print(f'Saved highlight to backend: {clip["clip_file"]}')
+        except requests.RequestException as error:
+            print(f'Failed to save highlight {clip["clip_file"]} to backend: {error}')
+
 
 def main() -> None:
     ensure_dir(CLIPS_DIR)
@@ -131,6 +160,7 @@ def main() -> None:
 
     metadata_path = BASE_DIR / "output" / "generated_highlights.json"
     save_generated_clips_metadata(generated_clips, metadata_path)
+    send_highlights_to_backend(generated_clips)
 
     print(f"\nSaved highlight metadata: {metadata_path}")
     print(f"Generated {len(generated_clips)} highlight clip(s)")
