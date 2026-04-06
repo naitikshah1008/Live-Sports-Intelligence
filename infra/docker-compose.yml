@@ -37,3 +37,20 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sports-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sports-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin

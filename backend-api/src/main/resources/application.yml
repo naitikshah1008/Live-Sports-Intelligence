@@ -32,3 +32,16 @@ app:
       score-events: sports.score.events
   highlights:
     clips-dir: /Users/naitikshah/live-sport-intelligence/highlight-service/output/clips
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true

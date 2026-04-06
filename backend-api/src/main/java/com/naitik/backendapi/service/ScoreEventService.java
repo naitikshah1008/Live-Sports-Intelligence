@@ -3,16 +3,24 @@ package com.naitik.backendapi.service;
 import com.naitik.backendapi.dto.ScoreEventMessage;
 import com.naitik.backendapi.entity.ScoreEvent;
 import com.naitik.backendapi.repository.ScoreEventRepository;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class ScoreEventService {
     private final ScoreEventRepository scoreEventRepository;
+    private final Counter scoreEventsConsumedCounter;
+
+    public ScoreEventService(ScoreEventRepository scoreEventRepository, MeterRegistry meterRegistry) {
+        this.scoreEventRepository = scoreEventRepository;
+        this.scoreEventsConsumedCounter = Counter.builder("sports_score_events_consumed_total")
+                .description("Total number of score events consumed and saved")
+                .register(meterRegistry);
+    }
 
     public ScoreEvent saveFromMessage(ScoreEventMessage message) {
         ScoreEvent event = new ScoreEvent();
@@ -23,7 +31,11 @@ public class ScoreEventService {
         event.setNewScore(message.getNewScore());
         event.setFile(message.getFile());
         event.setCreatedAt(Instant.now());
-        return scoreEventRepository.save(event);
+
+        ScoreEvent savedEvent = scoreEventRepository.save(event);
+        scoreEventsConsumedCounter.increment();
+
+        return savedEvent;
     }
 
     public List<ScoreEvent> getAllEvents() {

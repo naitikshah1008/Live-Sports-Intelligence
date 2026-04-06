@@ -3,8 +3,9 @@ package com.naitik.backendapi.service;
 import com.naitik.backendapi.dto.HighlightRequest;
 import com.naitik.backendapi.entity.Highlight;
 import com.naitik.backendapi.repository.HighlightRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -13,10 +14,16 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class HighlightService {
-
     private final HighlightRepository highlightRepository;
+    private final Counter highlightsSavedCounter;
+
+    public HighlightService(HighlightRepository highlightRepository, MeterRegistry meterRegistry) {
+        this.highlightRepository = highlightRepository;
+        this.highlightsSavedCounter = Counter.builder("sports_highlights_saved_total")
+                .description("Total number of highlights saved")
+                .register(meterRegistry);
+    }
 
     public Highlight saveHighlight(HighlightRequest request) {
         return highlightRepository.findByClipFile(request.getClipFile())
@@ -31,7 +38,11 @@ public class HighlightService {
                 highlight.setClipStartTime(request.getStartTime());
                 highlight.setDuration(request.getDuration());
                 highlight.setCreatedAt(Instant.now());
-                return highlightRepository.save(highlight);
+
+                Highlight saved = highlightRepository.save(highlight);
+                highlightsSavedCounter.increment();   // 👈 ADD THIS LINE
+
+                return saved;
             });
     }
 
