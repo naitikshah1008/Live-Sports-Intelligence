@@ -27,7 +27,7 @@ public class DashboardController {
                 .latestScore(latestScore)
                 .latestEvent(latestEventText)
                 .totalEvents(scoreEventService.getAllEvents().size())
-                .totalHighlights(highlightService.getHighlightCount())
+                .totalHighlights(highlightService.getLatestUniqueHighlightCount())
                 .build();
     }
 }

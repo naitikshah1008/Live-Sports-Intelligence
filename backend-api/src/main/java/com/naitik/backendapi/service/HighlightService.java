@@ -58,6 +58,10 @@ public class HighlightService {
         return highlightRepository.count();
     }
 
+    public long getLatestUniqueHighlightCount() {
+        return getLatestUniqueHighlights().size();
+    }
+
     public List<Highlight> getLatestUniqueHighlights() {
         List<Highlight> allHighlights = highlightRepository.findTop10ByOrderByCreatedAtDesc();
         Map<String, Highlight> uniqueHighlights = new LinkedHashMap<>();
