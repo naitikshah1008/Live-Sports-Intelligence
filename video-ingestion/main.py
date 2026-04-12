@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 from kafka import KafkaProducer
 from ultralytics import YOLO
+from digit_classifier import load_digit_classifier, read_digit_with_classifier
 
 BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR.parent / "sample-videos" / "match.mp4"
@@ -34,6 +35,10 @@ KAFKA_TOPIC_SCORE_EVENTS = "sports.score.events"
 YOLO_MODEL_PATH = BASE_DIR.parent / "runs" / "detect" / "train4" / "weights" / "best.pt"
 YOLO_CONFIDENCE_THRESHOLD = 0.50
 USE_TEMPLATE_FALLBACK = False
+
+DIGIT_TEMPLATE_DIR = BASE_DIR / "templates" / "digits"
+DIGIT_WIDTH = 40
+DIGIT_HEIGHT = 60
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -231,48 +236,6 @@ def crop_box(image, box):
     x, y, w, h = box
     return image[y:y + h, x:x + w]
 
-def preprocess_digit_image(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-    _, thresh = cv2.threshold(resized, 150, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(255 - thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return cv2.resize(thresh, (DIGIT_WIDTH, DIGIT_HEIGHT), interpolation=cv2.INTER_CUBIC)
-    largest = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(largest)
-    digit = thresh[y:y + h, x:x + w]
-    digit = cv2.resize(digit, (DIGIT_WIDTH, DIGIT_HEIGHT), interpolation=cv2.INTER_CUBIC)
-    return digit
-
-def load_digit_templates():
-    templates = {}
-    for digit in range(10):
-        template_path = DIGIT_TEMPLATE_DIR / f"{digit}.png"
-        if not template_path.exists():
-            continue
-        image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
-        if image is None:
-            continue
-        image = cv2.resize(image, (DIGIT_WIDTH, DIGIT_HEIGHT), interpolation=cv2.INTER_CUBIC)
-        templates[str(digit)] = image
-    return templates
-
-def match_digit_to_template(digit_image, templates):
-    best_digit = ""
-    best_score = -1.0
-    for digit, template in templates.items():
-        result = cv2.matchTemplate(digit_image, template, cv2.TM_CCOEFF_NORMED)
-        score = result[0][0]
-        if score > best_score:
-            best_score = score
-            best_digit = digit
-    return best_digit, best_score
-
-def read_digit_with_templates(image, templates):
-    processed = preprocess_digit_image(image)
-    digit, confidence = match_digit_to_template(processed, templates)
-    return digit, confidence
-
 def classify_boxes(boxes):
     if len(boxes) != 6:
         return None
@@ -292,7 +255,7 @@ def classify_boxes(boxes):
         "clock_4": clock_boxes[3],
     }
 
-def parse_scoreboard_from_boxes(scoreboard_path: Path, templates):
+def parse_scoreboard_from_boxes(scoreboard_path: Path, digit_model, digit_transform, idx_to_class):
     image = cv2.imread(str(scoreboard_path))
     if image is None:
         return None
@@ -304,29 +267,41 @@ def parse_scoreboard_from_boxes(scoreboard_path: Path, templates):
             "status": "unclassified",
             "boxes": boxes
         }
-    top_score, top_conf = read_digit_with_templates(
+    top_score, top_conf = read_digit_with_classifier(
         crop_box(normalized, field_map["top_score"]),
-        templates
+        digit_model,
+        digit_transform,
+        idx_to_class
     )
-    bottom_score, bottom_conf = read_digit_with_templates(
+    bottom_score, bottom_conf = read_digit_with_classifier(
         crop_box(normalized, field_map["bottom_score"]),
-        templates
+        digit_model,
+        digit_transform,
+        idx_to_class
     )
-    c1, c1_conf = read_digit_with_templates(
+    c1, c1_conf = read_digit_with_classifier(
         crop_box(normalized, field_map["clock_1"]),
-        templates
+        digit_model,
+        digit_transform,
+        idx_to_class
     )
-    c2, c2_conf = read_digit_with_templates(
+    c2, c2_conf = read_digit_with_classifier(
         crop_box(normalized, field_map["clock_2"]),
-        templates
+        digit_model,
+        digit_transform,
+        idx_to_class
     )
-    c3, c3_conf = read_digit_with_templates(
+    c3, c3_conf = read_digit_with_classifier(
         crop_box(normalized, field_map["clock_3"]),
-        templates
+        digit_model,
+        digit_transform,
+        idx_to_class
     )
-    c4, c4_conf = read_digit_with_templates(
+    c4, c4_conf = read_digit_with_classifier(
         crop_box(normalized, field_map["clock_4"]),
-        templates
+        digit_model,
+        digit_transform,
+        idx_to_class
     )
     clock = ""
     if all([c1, c2, c3, c4]):
@@ -354,14 +329,15 @@ def parse_all_scoreboards(detected_dir: Path, max_files: int | None = None):
     if not scoreboard_files:
         print(f"No detected scoreboard images found in {detected_dir}")
         return []
-    templates = load_digit_templates()
-    if not templates:
-        print(f"No digit templates found in {DIGIT_TEMPLATE_DIR}")
+    try:
+        digit_model, digit_transform, idx_to_class = load_digit_classifier()
+    except Exception as error:
+        print(f"Failed to load digit classifier: {error}")
         return []
     parsed_rows = []
     files_to_process = scoreboard_files if max_files is None else scoreboard_files[:max_files]
     for scoreboard_file in files_to_process:
-        parsed = parse_scoreboard_from_boxes(scoreboard_file, templates)
+        parsed = parse_scoreboard_from_boxes(scoreboard_file, digit_model, digit_transform, idx_to_class)
         if parsed is None:
             continue
         if parsed["status"] != "parsed":
