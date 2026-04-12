@@ -1,9 +1,9 @@
 import cv2
 import json
 import csv
-import numpy as np
 from pathlib import Path
 from kafka import KafkaProducer
+from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
 VIDEO_PATH = BASE_DIR.parent / "sample-videos" / "match.mp4"
@@ -30,6 +30,10 @@ EVENTS_CSV_PATH = PARSED_OUTPUT_DIR / "score_change_events.csv"
 
 KAFKA_BOOTSTRAP_SERVERS = "localhost:29092"
 KAFKA_TOPIC_SCORE_EVENTS = "sports.score.events"
+
+YOLO_MODEL_PATH = BASE_DIR.parent / "runs" / "detect" / "train4" / "weights" / "best.pt"
+YOLO_CONFIDENCE_THRESHOLD = 0.50
+USE_TEMPLATE_FALLBACK = False
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -75,38 +79,90 @@ def locate_scoreboard(frame, template, threshold: float):
     bottom_right = (top_left[0] + template_width, top_left[1] + template_height)
     return (top_left, bottom_right), max_val
 
-def auto_crop_scoreboards(frames_dir: Path, detected_dir: Path, template_path: Path, threshold: float) -> None:
+def auto_crop_scoreboards(frames_dir: Path, detected_dir: Path) -> None:
     ensure_dir(detected_dir)
     template = cv2.imread(str(template_path))
-    if template is None:
-        print(f"Error: could not read template image at {template_path}")
+    if template is None and USE_TEMPLATE_FALLBACK:
+        print(f"Warning: could not read template image at {template_path}")
+    if not YOLO_MODEL_PATH.exists():
+        print(f"Error: YOLO model not found at {YOLO_MODEL_PATH}")
         return
+    model = YOLO(str(YOLO_MODEL_PATH))
     frame_files = sorted(frames_dir.glob("*.jpg"))
     if not frame_files:
         print(f"No frames found in {frames_dir}")
         return
     detected_count = 0
+    fallback_count = 0
     missed_count = 0
-    print(f"\nRunning template matching on {len(frame_files)} frames...\n")
+    print(f"\nRunning YOLO scoreboard detection on {len(frame_files)} frames...\n")
     for frame_file in frame_files:
         frame = cv2.imread(str(frame_file))
         if frame is None:
             print(f"Skipping unreadable frame: {frame_file.name}")
             continue
-        match_box, confidence = locate_scoreboard(frame, template, threshold)
-        if match_box is None:
-            print(f"{frame_file.name} -> no match, confidence={confidence:.3f}")
+        detection_box, confidence = detect_scoreboard_with_yolo(
+            frame=frame,
+            model=model,
+            confidence_threshold=YOLO_CONFIDENCE_THRESHOLD
+        )
+        used_fallback = False
+        if detection_box is None and USE_TEMPLATE_FALLBACK and template is not None:
+            match_box, match_confidence = locate_scoreboard(frame, template, threshold)
+            if match_box is not None:
+                (top_left, bottom_right) = match_box
+                detection_box = (top_left[0], top_left[1], bottom_right[0], bottom_right[1])
+                confidence = match_confidence
+                used_fallback = True
+        if detection_box is None:
+            print(f"{frame_file.name} -> no detection")
             missed_count += 1
             continue
-        (x1, y1), (x2, y2) = match_box
+        x1, y1, x2, y2 = detection_box
+        # safety clamp
+        frame_height, frame_width = frame.shape[:2]
+        x1 = max(0, min(x1, frame_width - 1))
+        y1 = max(0, min(y1, frame_height - 1))
+        x2 = max(0, min(x2, frame_width))
+        y2 = max(0, min(y2, frame_height))
+        if x2 <= x1 or y2 <= y1:
+            print(f"{frame_file.name} -> invalid detection box")
+            missed_count += 1
+            continue
         scoreboard_crop = frame[y1:y2, x1:x2]
         output_file = detected_dir / frame_file.name.replace("frame_", "scoreboard_")
         cv2.imwrite(str(output_file), scoreboard_crop)
-        print(f"{frame_file.name} -> matched, confidence={confidence:.3f}")
-        detected_count += 1
-    print(f"\nTemplate matching complete")
-    print(f"Detected scoreboards: {detected_count}")
+        if used_fallback:
+            print(f"{frame_file.name} -> template fallback, confidence={confidence:.3f}")
+            fallback_count += 1
+        else:
+            print(f"{frame_file.name} -> YOLO detected, confidence={confidence:.3f}")
+            detected_count += 1
+    print(f"\nScoreboard detection complete")
+    print(f"YOLO detections: {detected_count}")
+    print(f"Template fallbacks: {fallback_count}")
     print(f"Missed frames: {missed_count}")
+
+def detect_scoreboard_with_yolo(frame, model, confidence_threshold: float):
+    results = model.predict(
+        source=frame,
+        conf=confidence_threshold,
+        verbose=False
+    )
+    if not results:
+        return None, 0.0
+    result = results[0]
+    if result.boxes is None or len(result.boxes) == 0:
+        return None, 0.0
+    best_box = None
+    best_confidence = 0.0
+    for box in result.boxes:
+        confidence = float(box.conf[0].item())
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        if confidence > best_confidence:
+            best_confidence = confidence
+            best_box = (int(x1), int(y1), int(x2), int(y2))
+    return best_box, best_confidence
 
 def normalize_scoreboard(image):
     return cv2.resize(image, (STANDARD_WIDTH, STANDARD_HEIGHT), interpolation=cv2.INTER_CUBIC)
@@ -525,28 +581,6 @@ def run_temporal_score_detection(detected_dir: Path, max_files: int | None = Non
     print(f"Events JSON:   {EVENTS_JSON_PATH}")
     print(f"Events CSV:    {EVENTS_CSV_PATH}")
     publish_events_to_kafka(events)
-
-def run_box_ocr(detected_dir: Path, max_files: int | None = None) -> None:
-    scoreboard_files = sorted(detected_dir.glob("*.jpg"))
-    if not scoreboard_files:
-        print(f"No detected scoreboard images found in {detected_dir}")
-        return
-    reader = easyocr.Reader(["en"], gpu=False)
-    files_to_process = scoreboard_files if max_files is None else scoreboard_files[:max_files]
-    print(f"\nRunning OCR on detected candidate boxes for {len(files_to_process)} scoreboards...\n")
-    for scoreboard_file in files_to_process:
-        parsed = parse_scoreboard_from_boxes(reader, scoreboard_file)
-        if parsed is None:
-            continue
-        if parsed["status"] != "parsed":
-            print(f'{parsed["file"]} -> could not classify boxes')
-            continue
-        print(
-            f'{parsed["file"]} -> '
-            f'clock={parsed["clock"]}, '
-            f'top_score={parsed["top_score"]}, '
-            f'bottom_score={parsed["bottom_score"]}'
-        )
 
 def save_debug_regions(scoreboard_path: Path, debug_dir: Path) -> None:
     ensure_dir(debug_dir)
