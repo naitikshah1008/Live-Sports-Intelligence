@@ -12,7 +12,6 @@ RAW_CROPS_DIR = PROJECT_ROOT / "training" / "digit-classifier" / "raw-crops"
 
 IMAGE_SIZE = 32
 
-
 class DigitCNN(nn.Module):
 
     def __init__(self):
