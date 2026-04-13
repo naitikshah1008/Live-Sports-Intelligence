@@ -32,9 +32,10 @@ LIVE_RECORDINGS_DIR = BASE_DIR / "output" / "live-recordings"
 BACKEND_HIGHLIGHTS_API = "http://localhost:8080/api/highlights"
 
 CAPTURE_FPS = 15
-PRE_EVENT_SECONDS = 12
-POST_EVENT_SECONDS = 6
-MIN_CONFIRM_FRAMES = 3
+EVENT_BACKSHIFT_SECONDS = 6
+PRE_EVENT_SECONDS = 9
+POST_EVENT_SECONDS = 8
+MIN_CONFIRM_FRAMES = 2
 
 # Screen region used by Python detection and by the FFmpeg screen recording command
 SCREEN_REGION = {
@@ -160,6 +161,8 @@ class LiveScoreTracker:
         self.current_stable_score = None
         self.candidate_score = None
         self.candidate_count = 0
+        self.candidate_started_at = None
+        self.candidate_clock = None
         self.event_counter = 0
         self.seen_event_keys = set()
 
@@ -171,27 +174,35 @@ class LiveScoreTracker:
         if score_tuple == self.current_stable_score:
             self.candidate_score = None
             self.candidate_count = 0
+            self.candidate_started_at = None
+            self.candidate_clock = None
             return None
         if self.candidate_score == score_tuple:
             self.candidate_count += 1
         else:
             self.candidate_score = score_tuple
             self.candidate_count = 1
+            self.candidate_started_at = session_elapsed_seconds
+            self.candidate_clock = parsed_row["clock"]
         if self.candidate_count < self.min_confirm_frames:
             return None
         old_score = self.current_stable_score
         new_score = self.candidate_score
+        event_timestamp = self.candidate_started_at if self.candidate_started_at is not None else session_elapsed_seconds
+        event_clock = self.candidate_clock if self.candidate_clock is not None else parsed_row["clock"]
         self.current_stable_score = new_score
         self.candidate_score = None
         self.candidate_count = 0
-        event_key = f'{parsed_row["clock"]}|{old_score[0]}-{old_score[1]}|{new_score[0]}-{new_score[1]}'
+        self.candidate_started_at = None
+        self.candidate_clock = None
+        event_key = f'{event_clock}|{old_score[0]}-{old_score[1]}|{new_score[0]}-{new_score[1]}'
         if event_key in self.seen_event_keys:
             return None
         self.seen_event_keys.add(event_key)
         self.event_counter += 1
         return {
-            "timestamp": session_elapsed_seconds,
-            "clock": parsed_row["clock"],
+            "timestamp": event_timestamp,
+            "clock": event_clock,
             "old_score": f"{old_score[0]}-{old_score[1]}",
             "new_score": f"{new_score[0]}-{new_score[1]}",
             "file": f"live_event_{self.event_counter:03d}.jpg",
@@ -215,25 +226,19 @@ def build_ffmpeg_record_command(output_path: Path):
     """
     macOS screen recording via avfoundation.
     You may need to adjust the avfoundation input string on your machine.
-    Common examples:
-      -i "1:none"
-      -i "Capture screen 0:none"
-    This version uses full-screen capture source "1:none" as a common default.
-    We crop to SCREEN_REGION so detection region and recording region match.
     """
-    crop_filter = (
-        f"crop={SCREEN_REGION['width']}:{SCREEN_REGION['height']}:"
-        f"{SCREEN_REGION['left']}:{SCREEN_REGION['top']}"
-    )
     command = [
         "ffmpeg",
         "-y",
         "-f", "avfoundation",
         "-framerate", str(CAPTURE_FPS),
-        "-i", "3:none",   # change to 4:none if your target display is screen 1
+        "-i", "3:none",   # change if needed on your machine
         "-c:v", "libx264",
         "-preset", "veryfast",
         "-pix_fmt", "yuv420p",
+        "-g", str(CAPTURE_FPS * 2),           # keyframe every ~2 seconds
+        "-keyint_min", str(CAPTURE_FPS * 2),
+        "-sc_threshold", "0",
         "-f", "mpegts",
         str(output_path),
     ]
@@ -273,15 +278,17 @@ def cut_highlight_from_recording(recording_path: Path, event, clips_dir: Path):
         print("Recording file does not exist yet. Cannot cut clip.")
         return None
     ensure_dir(clips_dir)
-    start_time = max(0, float(event["timestamp"]) - PRE_EVENT_SECONDS)
+    raw_event_timestamp = float(event["timestamp"])
+    shifted_event_timestamp = max(0, raw_event_timestamp - EVENT_BACKSHIFT_SECONDS)
+    start_time = max(0, shifted_event_timestamp - PRE_EVENT_SECONDS)
     duration = PRE_EVENT_SECONDS + POST_EVENT_SECONDS
     clip_name = f'live_highlight_{event["clock"].replace(":", "-")}_{event["new_score"].replace("-", "_")}.mp4'
     output_path = clips_dir / clip_name
     command = [
         "ffmpeg",
         "-y",
-        "-ss", str(start_time),
         "-i", str(recording_path),
+        "-ss", str(start_time),               # move -ss AFTER -i for accurate cutting
         "-t", str(duration),
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
@@ -297,12 +304,13 @@ def cut_highlight_from_recording(recording_path: Path, event, clips_dir: Path):
     return {
         "clip_file": clip_name,
         "clip_path": str(output_path),
-        "event_timestamp": event["timestamp"],
+        "event_timestamp": raw_event_timestamp,
         "clock": event["clock"],
         "old_score": event["old_score"],
         "new_score": event["new_score"],
         "start_time": start_time,
         "duration": duration,
+        "shifted_event_timestamp": shifted_event_timestamp,
     }
 
 def main():
@@ -350,13 +358,14 @@ def main():
                         event = tracker.update(parsed, session_elapsed_seconds)
                         if event is not None:
                             print(
-                                f'EVENT DETECTED -> {event["clock"]} | '
-                                f'{event["old_score"]} -> {event["new_score"]}'
+                                f'EVENT DETECTED -> clock={event["clock"]} | '
+                                f'{event["old_score"]} -> {event["new_score"]} | '
+                                f'timestamp={event["timestamp"]:.2f}s'
                             )
                             publish_score_event(event)
                             pending_events.append({
                                 "event": event,
-                                "ready_at": time.time() + POST_EVENT_SECONDS
+                                "ready_at": time.time() + POST_EVENT_SECONDS + 1
                             })
                 ready_to_finalize = [
                     item for item in pending_events
@@ -369,7 +378,13 @@ def main():
                         clips_dir=LIVE_CLIPS_DIR
                     )
                     if clip_record is not None:
-                        print(f'Generated live clip from recording: {clip_record["clip_file"]}')
+                        print(
+                            f'Generated live clip from recording: {clip_record["clip_file"]} | '
+                            f'raw_t={clip_record["event_timestamp"]:.2f}s | '
+                            f'shifted_t={clip_record["shifted_event_timestamp"]:.2f}s | '
+                            f'start={clip_record["start_time"]:.2f}s | '
+                            f'duration={clip_record["duration"]:.2f}s'
+                        )
                         send_highlight_to_backend(clip_record)
                     pending_events.remove(item)
                 elapsed = time.time() - loop_start
