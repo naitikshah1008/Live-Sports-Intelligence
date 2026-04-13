@@ -42,6 +42,12 @@ public class HighlightController {
         return highlightService.getLatestUniqueHighlights();
     }
 
+    @DeleteMapping("/{id}/with-event")
+    public ResponseEntity<Void> deleteHighlightWithEvent(@PathVariable Long id) {
+        highlightService.deleteHighlightAndMatchingEvent(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/file/{clipFile}")
     public ResponseEntity<Resource> serveHighlightClip(@PathVariable String clipFile) {
         try {

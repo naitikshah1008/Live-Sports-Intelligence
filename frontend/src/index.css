@@ -109,3 +109,18 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.delete-button {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.delete-button:hover {
+  background: #b91c1c;
+}

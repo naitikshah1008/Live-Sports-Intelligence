@@ -35,7 +35,7 @@ CAPTURE_FPS = 15
 EVENT_BACKSHIFT_SECONDS = 6
 PRE_EVENT_SECONDS = 9
 POST_EVENT_SECONDS = 8
-MIN_CONFIRM_FRAMES = 2
+MIN_CONFIRM_FRAMES = 3
 
 # Screen region used by Python detection and by the FFmpeg screen recording command
 SCREEN_REGION = {

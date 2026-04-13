@@ -9,7 +9,6 @@ function App() {
   const [events, setEvents] = useState([]);
   const [highlights, setHighlights] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const fetchDashboardData = async () => {
     try {
       const [summaryResponse, eventsResponse, highlightsResponse] = await Promise.all([
@@ -26,7 +25,6 @@ function App() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchDashboardData();
     const interval = setInterval(() => {
@@ -34,6 +32,19 @@ function App() {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+  const handleDeleteHighlight = async (highlightId, clipFile) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${clipFile}" and its matching timeline event?`
+    );
+    if (!confirmed) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/highlights/${highlightId}/with-event`);
+      await fetchDashboardData();
+    } catch (error) {
+      console.error("Failed to delete highlight and event:", error);
+      alert("Failed to delete highlight.");
+    }
+  };
 
   return (
     <div className="app">
@@ -104,6 +115,12 @@ function App() {
                         />
                         Your browser does not support the video tag.
                       </video>
+                      <button
+                        className="delete-button"
+                        onClick={() => handleDeleteHighlight(highlight.id, highlight.clipFile)}
+                      >
+                        Delete
+                      </button>
                     </div>
                   ))}
                 </div>

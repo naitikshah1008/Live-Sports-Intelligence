@@ -10,4 +10,5 @@ public interface HighlightRepository extends JpaRepository<Highlight, Long> {
     List<Highlight> findAllByOrderByEventTimestampAsc();
     List<Highlight> findTop10ByOrderByCreatedAtDesc();
     Optional<Highlight> findByClipFile(String clipFile);
+    Optional<Highlight> findById(Long id);
 }

@@ -16,7 +16,7 @@ public class DashboardController {
     private final HighlightService highlightService;
     @GetMapping("/summary")
     public DashboardSummaryResponse getSummary() {
-        ScoreEvent latestEvent = scoreEventService.getLatestEventRecord();
+        ScoreEvent latestEvent = scoreEventService.getLatestValidUniqueEvent();
         String latestClock = latestEvent != null ? latestEvent.getClock() : "-";
         String latestScore = latestEvent != null ? latestEvent.getNewScore() : "-";
         String latestEventText = latestEvent != null
@@ -26,7 +26,7 @@ public class DashboardController {
                 .latestClock(latestClock)
                 .latestScore(latestScore)
                 .latestEvent(latestEventText)
-                .totalEvents(scoreEventService.getAllEvents().size())
+                .totalEvents(scoreEventService.getLatestUniqueEvents().size())
                 .totalHighlights(highlightService.getLatestUniqueHighlightCount())
                 .build();
     }
