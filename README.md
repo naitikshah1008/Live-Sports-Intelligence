@@ -182,6 +182,12 @@ Shows:
 
 ---
 
+## UI Preview
+
+### Main Dashboard
+![Main Dashboard](assets/screenshot.png)
+---
+
 ## Monitoring
 
 Access Grafana:
