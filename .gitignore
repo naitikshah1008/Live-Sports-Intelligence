@@ -115,6 +115,7 @@ highlight-service/output/
 *.jpg
 *.png
 !video-ingestion/template/scoreboard_template.jpg
+!assets/screenshot.png
 
 # ========================
 # YOLO training outputs
