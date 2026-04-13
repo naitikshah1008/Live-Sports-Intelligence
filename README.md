@@ -31,6 +31,13 @@ This project transforms raw sports video into actionable insights by:
 
 ---
 
+## UI Preview
+
+### Main Dashboard
+![Main Dashboard](assets/screenshot.png)
+
+---
+
 ## How It Works
 
 1. **Video / Screen Input**
@@ -180,12 +187,6 @@ Shows:
 - Highlight clips with playback
 - Delete option for highlights
 
----
-
-## UI Preview
-
-### Main Dashboard
-![Main Dashboard](assets/screenshot.png)
 ---
 
 ## Monitoring
