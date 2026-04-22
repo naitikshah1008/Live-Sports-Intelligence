@@ -4,3 +4,7 @@ numpy
 ultralytics
 mss
 requests
+numpy
+torch
+torchvision
+Pillow

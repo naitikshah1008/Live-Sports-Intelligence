@@ -96,12 +96,18 @@ def send_highlight_to_backend(clip):
         "startTime": clip["start_time"],
         "duration": clip["duration"]
     }
-    try:
-        response = requests.post(BACKEND_HIGHLIGHTS_API, json=payload, timeout=10)
-        response.raise_for_status()
-        print(f'Saved highlight to backend: {clip["clip_file"]}')
-    except requests.RequestException as error:
-        print(f'Failed to save highlight to backend: {error}')
+    max_attempts = 5
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.post(BACKEND_HIGHLIGHTS_API, json=payload, timeout=10)
+            response.raise_for_status()
+            print(f'Saved highlight to backend: {clip["clip_file"]}')
+            return True
+        except requests.RequestException as error:
+            print(f'Attempt {attempt}/{max_attempts} failed to save highlight: {error}')
+            time.sleep(2)
+    print(f'Giving up on saving highlight to backend: {clip["clip_file"]}')
+    return False
 
 def parse_scoreboard_image(scoreboard_image, digit_model, digit_transform, idx_to_class):
     normalized, _, boxes = detect_text_regions(scoreboard_image)
