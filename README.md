@@ -1,6 +1,6 @@
 # Live Sports Intelligence
 
-A real-time sports video intelligence system that detects score-change events from broadcast footage, generates AI-assisted highlight clips, streams events through Kafka, and visualizes results in a live dashboard.
+A soccer-focused real-time video intelligence system that detects scoreboard-driven score-change events, generates highlight clips, streams events through Kafka, and visualizes results in a live dashboard.
 
 ---
 
@@ -17,17 +17,32 @@ This project transforms raw sports video into actionable insights by:
 
 ---
 
+## Current Scope
+
+This version is focused on soccer and is optimized for the trained scoreboard layout used in the demo pipeline.
+
+It supports:
+
+- Offline video processing via Docker
+- Local live screen monitoring on the user's device
+- Kafka-based event streaming
+- Spring Boot APIs with PostgreSQL persistence
+- React dashboard with highlight playback
+
+---
+
 ## Features
 
--  Real-time scoreboard detection from video or live screen
--  Noise-resistant event detection using temporal smoothing
--  Accurate highlight generation with timestamp correction
--  FFmpeg-based clip generation for smooth playback
--  Kafka-based event streaming pipeline
--  PostgreSQL-backed storage for events and highlights
--  Live React dashboard with video playback
--  Prometheus + Grafana for system monitoring
--  Delete highlights with confirmation (UI + backend sync)
+- Real-time scoreboard detection from video or live screen
+- Noise-resistant event detection using temporal smoothing
+- Accurate highlight generation with timestamp refinement
+- Continuous recording with FFmpeg for smooth playback
+- Kafka-based event streaming pipeline
+- PostgreSQL-backed storage for events and highlights
+- Live React dashboard with video playback
+- Prometheus + Grafana for system monitoring
+- Delete highlights with confirmation (UI + backend sync)
+- One-command Dockerized offline pipeline execution
 
 ---
 
@@ -41,16 +56,15 @@ This project transforms raw sports video into actionable insights by:
 ## How It Works
 
 1. **Video / Screen Input**
-   - Input can be:
-     - Recorded match video
-     - Live screen capture (local device)
+   - Recorded match video (offline mode)
+   - Live screen capture (local mode)
 
 2. **Scoreboard Detection**
    - YOLO detects scoreboard region
-   - Digit classifier extracts score + clock
+   - Digit classifier extracts score and clock
 
 3. **Event Detection**
-   - Temporal smoothing avoids OCR noise
+   - Temporal smoothing removes OCR noise
    - Score changes trigger events
 
 4. **Event Streaming**
@@ -65,7 +79,7 @@ This project transforms raw sports video into actionable insights by:
    - Stores data in PostgreSQL
 
 7. **Visualization**
-   - React dashboard shows:
+   - React dashboard displays:
      - latest score
      - timeline
      - highlight clips
@@ -75,20 +89,18 @@ This project transforms raw sports video into actionable insights by:
 ## Architecture
 
 ```text
-[ Video / Screen Capture ]
-            ↓
-[ Python Video Pipeline ]
- (YOLO + OCR + Smoothing)
-            ↓
-        Kafka
-            ↓
-[ Spring Boot Backend ]
-            ↓
-     PostgreSQL DB
-            ↓
-     React Dashboard
-            ↓
-        Grafana
+[ Video File ] or [ Local Screen Capture ]
+                    ↓
+        [ Python Detection Pipeline ]
+   (YOLO + Digit Classifier + Smoothing)
+                    ↓
+                  Kafka
+                    ↓
+         [ Spring Boot Backend API ]
+              ↓                 ↓
+       PostgreSQL DB       Prometheus
+              ↓                 ↓
+       React Dashboard       Grafana
 ```
 ---
 
@@ -126,13 +138,19 @@ This project transforms raw sports video into actionable insights by:
 
 ```bash
 live-sports-intelligence/
-├── backend-api/           # Spring Boot APIs
-├── video-ingestion/       # Python detection + live monitor
-├── highlight-service/     # Generated clips
-├── frontend/              # React dashboard
-├── infra/                 # Kafka, Zookeeper, Prometheus
-├── sample-videos/         # Test videos
-├── assets/                # Diagrams / media
+├── docker-compose.yml          # Full stack orchestration
+├── pipeline.Dockerfile         # Offline pipeline container
+├── backend-api/                # Spring Boot APIs
+│   └── Dockerfile
+├── frontend/                   # React dashboard
+│   ├── Dockerfile
+│   └── nginx.conf
+├── video-ingestion/            # Detection + live monitor
+├── highlight-service/          # Generated clips
+├── infra/                      # Prometheus config and legacy infra
+├── training/                   # YOLO + digit classifier training
+├── sample-videos/              # Test videos
+├── assets/                     # Screenshots / media
 └── README.md
 ```
 
@@ -140,37 +158,45 @@ live-sports-intelligence/
 
 ## Setup & Run
 
-### 1. Start Infrastructure
+### Offline Mode (Fully Dockerized)
+
+Starts the full system and runs the offline pipeline once.
 
 ```bash
-cd infra
-docker compose up -d
+docker compose up --build
 ```
 
-### 2. Run Backend
+Services:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8080
+- Grafana: http://localhost:3000
+- Prometheus: http://localhost:9090
+
+### Live Local Mode
+
+Runs backend + frontend + infra in Docker and live detection locally.
 
 ```bash
-cd backend-api
-mvn spring-boot:run
-```
+docker compose up --build
 
-### 3. Run Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### 3. Run Video Pipeline
-Offline mode (video file):
-```bash
 cd video-ingestion
-python main.py
-```
-Live mode (screen capture):
-```bash
+source .venv/bin/activate
+pip install -r requirements.txt
 python live_screen_monitor.py
 ```
+Notes:
+- Live mode runs locally (not fully containerized)
+- Requires screen recording permissions
+- Works best with visible scoreboard and supported layout
+
+### Key API Endpoints
+
+- GET /api/dashboard/summary
+- GET /api/events
+- GET /api/highlights
+- GET /api/highlights/latest
+- GET /api/highlights/file/{clipFile}
+- DELETE /api/highlights/{id}/with-event
 
 ---
 
@@ -180,7 +206,7 @@ Access:
 ```bash
 http://localhost:5173
 ```
-Shows:
+Displays:
 - Latest clock & score
 - Latest event
 - Match timeline (deduplicated)
@@ -198,29 +224,20 @@ http://localhost:3000
 Tracks:
 - events processed
 - highlights generated
-- system performance
-
----
-
-## Known Limitations
-
-- Works best with clear scoreboard layouts
-- OCR may fail on low-quality streams
-- Screen capture may not work with DRM-protected players
-- Audio not included in highlights (future improvement)
+- Backend performance metrics
+- System health and usage
 
 ---
 
 ## Future Improvements
 
 - Multi-sport support (basketball, cricket, etc.)
-- Fully automated scoreboard detection (no layout assumptions)
-- Audio-based event refinement
+- Fully generalized scoreboard detection
+- Audio-assisted event refinement
+- ML-based goal detection beyond scoreboard changes
+- WebSocket-based real-time updates
 - Cloud deployment (AWS/GCP)
-- Real-time WebSocket updates
-- Auto-delete video files from storage
-- ML-based goal detection (beyond scoreboard)
-
+- Automated video storage cleanup
 ---
 
 ## Author
