@@ -97,6 +97,7 @@ output/
 *.swp
 *.swo
 *.sfdx
+PROJECT_STATUS.md
 
 # ========================
 # Service-specific ignores
