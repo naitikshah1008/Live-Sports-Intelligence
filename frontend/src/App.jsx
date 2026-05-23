@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import "./index.css";
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
 function App() {
   const [summary, setSummary] = useState(null);
@@ -110,7 +110,7 @@ function App() {
 
                       <video controls width="100%" className="video-player">
                         <source
-                          src={`http://localhost:8080/api/highlights/file/${highlight.clipFile}`}
+                          src={`${API_BASE_URL}/highlights/file/${encodeURIComponent(highlight.clipFile)}`}
                           type="video/mp4"
                         />
                         Your browser does not support the video tag.
