@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import librosa
 import numpy as np
 import requests
 
-BACKEND_HIGHLIGHTS_API = "http://localhost:8080/api/highlights"
+BACKEND_HIGHLIGHTS_API = os.getenv("BACKEND_HIGHLIGHTS_API", "http://localhost:8080/api/highlights")
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent

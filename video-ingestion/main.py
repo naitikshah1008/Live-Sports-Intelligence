@@ -1,6 +1,7 @@
 import cv2
 import json
 import csv
+import os
 from pathlib import Path
 from kafka import KafkaProducer
 from ultralytics import YOLO
@@ -19,26 +20,18 @@ MATCH_THRESHOLD = 0.60
 STANDARD_WIDTH = 420
 STANDARD_HEIGHT = 220
 
-DIGIT_TEMPLATE_DIR = BASE_DIR / "templates" / "digits"
-DIGIT_WIDTH = 40
-DIGIT_HEIGHT = 60
-
 PARSED_OUTPUT_DIR = BASE_DIR / "output" / "parsed-data"
 TIMELINE_JSON_PATH = PARSED_OUTPUT_DIR / "scoreboard_timeline.json"
 TIMELINE_CSV_PATH = PARSED_OUTPUT_DIR / "scoreboard_timeline.csv"
 EVENTS_JSON_PATH = PARSED_OUTPUT_DIR / "score_change_events.json"
 EVENTS_CSV_PATH = PARSED_OUTPUT_DIR / "score_change_events.csv"
 
-KAFKA_BOOTSTRAP_SERVERS = "localhost:29092"
-KAFKA_TOPIC_SCORE_EVENTS = "sports.score.events"
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+KAFKA_TOPIC_SCORE_EVENTS = os.getenv("KAFKA_TOPIC_SCORE_EVENTS", "sports.score.events")
 
 YOLO_MODEL_PATH = BASE_DIR.parent / "runs" / "detect" / "train4" / "weights" / "best.pt"
 YOLO_CONFIDENCE_THRESHOLD = 0.50
 USE_TEMPLATE_FALLBACK = False
-
-DIGIT_TEMPLATE_DIR = BASE_DIR / "templates" / "digits"
-DIGIT_WIDTH = 40
-DIGIT_HEIGHT = 60
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -84,9 +77,14 @@ def locate_scoreboard(frame, template, threshold: float):
     bottom_right = (top_left[0] + template_width, top_left[1] + template_height)
     return (top_left, bottom_right), max_val
 
-def auto_crop_scoreboards(frames_dir: Path, detected_dir: Path) -> None:
+def auto_crop_scoreboards(
+    frames_dir: Path,
+    detected_dir: Path,
+    template_path: Path = TEMPLATE_PATH,
+    threshold: float = MATCH_THRESHOLD
+) -> None:
     ensure_dir(detected_dir)
-    template = cv2.imread(str(template_path))
+    template = cv2.imread(str(template_path)) if USE_TEMPLATE_FALLBACK else None
     if template is None and USE_TEMPLATE_FALLBACK:
         print(f"Warning: could not read template image at {template_path}")
     if not YOLO_MODEL_PATH.exists():

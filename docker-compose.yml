@@ -115,11 +115,13 @@ services:
         condition: service_started
     environment:
       PYTHONUNBUFFERED: "1"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      BACKEND_HIGHLIGHTS_API: http://backend-api:8080/api/highlights
     volumes:
       - ./sample-videos:/app/sample-videos
       - ./runs:/app/runs
       - ./training:/app/training
-      - ./video-ingestion/templates:/app/video-ingestion/templates
+      - ./video-ingestion/template:/app/video-ingestion/template:ro
       - ./video-ingestion/output:/app/video-ingestion/output
       - ./highlight-service/output:/app/highlight-service/output
     command: >

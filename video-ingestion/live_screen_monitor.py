@@ -29,7 +29,7 @@ PROJECT_ROOT = BASE_DIR.parent
 LIVE_CLIPS_DIR = PROJECT_ROOT / "highlight-service" / "output" / "clips"
 LIVE_RECORDINGS_DIR = BASE_DIR / "output" / "live-recordings"
 
-BACKEND_HIGHLIGHTS_API = "http://localhost:8080/api/highlights"
+BACKEND_HIGHLIGHTS_API = os.getenv("BACKEND_HIGHLIGHTS_API", "http://localhost:8080/api/highlights")
 
 CAPTURE_FPS = 15
 EVENT_BACKSHIFT_SECONDS = 6
