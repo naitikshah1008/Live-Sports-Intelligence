@@ -38,7 +38,8 @@ target/
 *.war
 *.class
 *.log
-.mvn/
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
 .settings/
 .project
 .classpath
