@@ -6,6 +6,7 @@ import com.naitik.backendapi.repository.HighlightRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -87,15 +88,21 @@ public class HighlightService {
         return highlightRepository.findById(id);
     }
 
-    public void deleteHighlightAndMatchingEvent(Long highlightId) {
-        Highlight highlight = highlightRepository.findById(highlightId)
-                .orElseThrow(() -> new RuntimeException("Highlight not found"));
+    @Transactional
+    public boolean deleteHighlightAndMatchingEvent(Long highlightId) {
+        Optional<Highlight> existingHighlight = highlightRepository.findById(highlightId);
+        if (existingHighlight.isEmpty()) {
+            return false;
+        }
 
+        Highlight highlight = existingHighlight.get();
         String clock = highlight.getClock();
         String oldScore = highlight.getOldScore();
         String newScore = highlight.getNewScore();
+        Double eventTimestamp = highlight.getEventTimestamp();
 
         highlightRepository.delete(highlight);
-        scoreEventService.deleteMatchingEvents(clock, oldScore, newScore);
+        scoreEventService.deleteMatchingEvent(clock, oldScore, newScore, eventTimestamp);
+        return true;
     }
 }

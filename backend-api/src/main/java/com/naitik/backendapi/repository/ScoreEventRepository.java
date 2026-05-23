@@ -11,5 +11,10 @@ public interface ScoreEventRepository extends JpaRepository<ScoreEvent, Long> {
     List<ScoreEvent> findTop10ByOrderByCreatedAtDesc();
     List<ScoreEvent> findAllByOrderByCreatedAtDesc();
     Optional<ScoreEvent> findTopByOrderByCreatedAtDesc();
-    List<ScoreEvent> findByClockAndOldScoreAndNewScore(String clock, String oldScore, String newScore);
+    Optional<ScoreEvent> findFirstByClockAndOldScoreAndNewScoreAndVideoTimestamp(
+            String clock,
+            String oldScore,
+            String newScore,
+            Double videoTimestamp
+    );
 }

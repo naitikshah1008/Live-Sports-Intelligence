@@ -70,9 +70,13 @@ public class ScoreEventService {
         return uniqueEvents.isEmpty() ? null : uniqueEvents.get(0);
     }
 
-    public void deleteMatchingEvents(String clock, String oldScore, String newScore) {
-        List<ScoreEvent> matchingEvents = scoreEventRepository.findByClockAndOldScoreAndNewScore(clock, oldScore, newScore);
-        scoreEventRepository.deleteAll(matchingEvents);
+    public void deleteMatchingEvent(String clock, String oldScore, String newScore, Double videoTimestamp) {
+        if (videoTimestamp == null) {
+            return;
+        }
+        scoreEventRepository
+                .findFirstByClockAndOldScoreAndNewScoreAndVideoTimestamp(clock, oldScore, newScore, videoTimestamp)
+                .ifPresent(scoreEventRepository::delete);
     }
 
     public List<ScoreEvent> getEventsWithHighlights(List<Highlight> highlights) {
