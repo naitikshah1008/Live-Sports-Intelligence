@@ -1,8 +1,11 @@
 package com.naitik.backendapi.service;
 
 import com.naitik.backendapi.dto.ScoreEventMessage;
+import com.naitik.backendapi.entity.Highlight;
 import com.naitik.backendapi.entity.ScoreEvent;
+import com.naitik.backendapi.repository.PipelineRunRepository;
 import com.naitik.backendapi.repository.ScoreEventRepository;
+import com.naitik.backendapi.repository.SportMatchRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
@@ -12,15 +15,23 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import com.naitik.backendapi.entity.Highlight;
 
 @Service
 public class ScoreEventService {
     private final ScoreEventRepository scoreEventRepository;
+    private final SportMatchRepository sportMatchRepository;
+    private final PipelineRunRepository pipelineRunRepository;
     private final Counter scoreEventsConsumedCounter;
 
-    public ScoreEventService(ScoreEventRepository scoreEventRepository, MeterRegistry meterRegistry) {
+    public ScoreEventService(
+            ScoreEventRepository scoreEventRepository,
+            SportMatchRepository sportMatchRepository,
+            PipelineRunRepository pipelineRunRepository,
+            MeterRegistry meterRegistry
+    ) {
         this.scoreEventRepository = scoreEventRepository;
+        this.sportMatchRepository = sportMatchRepository;
+        this.pipelineRunRepository = pipelineRunRepository;
         this.scoreEventsConsumedCounter = Counter.builder("sports_score_events_consumed_total")
                 .description("Total number of score events consumed and saved")
                 .register(meterRegistry);
@@ -35,6 +46,7 @@ public class ScoreEventService {
         event.setNewScore(message.getNewScore());
         event.setFile(message.getFile());
         event.setCreatedAt(Instant.now());
+        attachMatchAndRun(event, message.getMatchId(), message.getPipelineRunId());
 
         ScoreEvent savedEvent = scoreEventRepository.save(event);
         scoreEventsConsumedCounter.increment();
@@ -94,5 +106,20 @@ public class ScoreEventService {
             }
         }
         return new ArrayList<>(uniqueEvents.values());
+    }
+
+    private void attachMatchAndRun(ScoreEvent event, Long matchId, Long pipelineRunId) {
+        if (matchId != null) {
+            sportMatchRepository.findById(matchId).ifPresent(event::setMatch);
+        }
+        if (pipelineRunId != null) {
+            pipelineRunRepository.findById(pipelineRunId)
+                    .ifPresent(run -> {
+                        event.setPipelineRun(run);
+                        if (event.getMatch() == null) {
+                            event.setMatch(run.getMatch());
+                        }
+                    });
+        }
     }
 }

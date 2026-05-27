@@ -1,5 +1,6 @@
 package com.naitik.backendapi.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -39,6 +40,16 @@ public class Highlight {
 
     @Column(nullable = false)
     private Double duration;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "match_id")
+    private SportMatch match;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pipeline_run_id")
+    private PipelineRun pipelineRun;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

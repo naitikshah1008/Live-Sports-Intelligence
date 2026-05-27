@@ -14,4 +14,6 @@ public class HighlightRequest {
     private String newScore;
     private Double startTime;
     private Double duration;
+    private Long matchId;
+    private Long pipelineRunId;
 }

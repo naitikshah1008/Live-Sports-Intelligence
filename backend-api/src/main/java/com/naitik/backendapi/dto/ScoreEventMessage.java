@@ -21,4 +21,10 @@ public class ScoreEventMessage {
     private String newScore;
 
     private String file;
+
+    @JsonProperty("match_id")
+    private Long matchId;
+
+    @JsonProperty("pipeline_run_id")
+    private Long pipelineRunId;
 }

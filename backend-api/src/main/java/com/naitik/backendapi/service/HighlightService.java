@@ -3,6 +3,8 @@ package com.naitik.backendapi.service;
 import com.naitik.backendapi.dto.HighlightRequest;
 import com.naitik.backendapi.entity.Highlight;
 import com.naitik.backendapi.repository.HighlightRepository;
+import com.naitik.backendapi.repository.PipelineRunRepository;
+import com.naitik.backendapi.repository.SportMatchRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
@@ -20,15 +22,21 @@ public class HighlightService {
 
     private final HighlightRepository highlightRepository;
     private final ScoreEventService scoreEventService;
+    private final SportMatchRepository sportMatchRepository;
+    private final PipelineRunRepository pipelineRunRepository;
     private final Counter highlightsSavedCounter;
 
     public HighlightService(
             HighlightRepository highlightRepository,
             ScoreEventService scoreEventService,
+            SportMatchRepository sportMatchRepository,
+            PipelineRunRepository pipelineRunRepository,
             MeterRegistry meterRegistry
     ) {
         this.highlightRepository = highlightRepository;
         this.scoreEventService = scoreEventService;
+        this.sportMatchRepository = sportMatchRepository;
+        this.pipelineRunRepository = pipelineRunRepository;
         this.highlightsSavedCounter = Counter.builder("sports_highlights_saved_total")
                 .description("Total number of highlights saved")
                 .register(meterRegistry);
@@ -47,6 +55,7 @@ public class HighlightService {
                     highlight.setClipStartTime(request.getStartTime());
                     highlight.setDuration(request.getDuration());
                     highlight.setCreatedAt(Instant.now());
+                    attachMatchAndRun(highlight, request.getMatchId(), request.getPipelineRunId());
 
                     Highlight saved = highlightRepository.save(highlight);
                     highlightsSavedCounter.increment();
@@ -104,5 +113,20 @@ public class HighlightService {
         highlightRepository.delete(highlight);
         scoreEventService.deleteMatchingEvent(clock, oldScore, newScore, eventTimestamp);
         return true;
+    }
+
+    private void attachMatchAndRun(Highlight highlight, Long matchId, Long pipelineRunId) {
+        if (matchId != null) {
+            sportMatchRepository.findById(matchId).ifPresent(highlight::setMatch);
+        }
+        if (pipelineRunId != null) {
+            pipelineRunRepository.findById(pipelineRunId)
+                    .ifPresent(run -> {
+                        highlight.setPipelineRun(run);
+                        if (highlight.getMatch() == null) {
+                            highlight.setMatch(run.getMatch());
+                        }
+                    });
+        }
     }
 }
