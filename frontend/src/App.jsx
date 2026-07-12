@@ -188,14 +188,18 @@ function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div>
+        <div className="topbar-title">
           <p className="eyebrow">Live Sports Intelligence</p>
           <h1>Match Operations</h1>
         </div>
         <div className="topbar-actions">
+          <span className="live-indicator">
+            <span aria-hidden="true" />
+            Live feed
+          </span>
           <span className="sync-text">Updated {lastUpdated ? formatDate(lastUpdated) : "-"}</span>
           <button className="icon-button" type="button" onClick={fetchDashboardData} title="Refresh">
-            <span aria-hidden="true">+</span>
+            <span aria-hidden="true">↻</span>
             Refresh
           </button>
         </div>
